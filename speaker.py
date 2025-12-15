@@ -1,132 +1,75 @@
+import os
 import threading
 import time
-from pygame import mixer
-from gtts import gTTS
-import os
 import uuid
-from collections import deque
+import pygame
+from gtts import gTTS
 
+# Shared state to check if speaker is active
+_global_speaker_active = False
+
+def is_speaking():
+    return _global_speaker_active
 
 class GTTSThread(threading.Thread):
-    """Thread-safe TTS worker using a deque and a lock.
-
-    This avoids race conditions when multiple threads call `speak()`.
-    """
     def __init__(self):
-        super().__init__()
-        self.text_queue = deque()
+        threading.Thread.__init__(self)
+        self.queue = []
         self.lock = threading.Lock()
-        self.is_running = True
-        try:
-            mixer.init()
-        except Exception:
-            # If mixer.init fails (e.g., no audio device), continue but log later
-            print("⚠️  Warning: pygame.mixer init failed")
+        self.running = True
 
-    def run(self) -> None:
-        while self.is_running:
-            text = None
-            with self.lock:
-                if self.text_queue:
-                    text = self.text_queue.popleft()
+    def run(self):
+        global _global_speaker_active
+        while self.running:
+            text_to_speak = None
+            
+            self.lock.acquire()
+            if self.queue:
+                text_to_speak = self.queue.pop(0)
+            self.lock.release()
 
-            if text:
-                self._speak_text(text)
-            else:
-                time.sleep(0.05)
-
-    def _speak_text(self, text: str):
-        filename = f"temp_{uuid.uuid4()}.mp3"
-        try:
-            # Use US English for faster generation (tld='com' is faster than 'co.in')
-            tts = gTTS(text=text, lang='en', tld='com', slow=False)
-            tts.save(filename)
-
-            mixer.music.load(filename)
-            mixer.music.play()
-            while mixer.music.get_busy():
-                time.sleep(0.05)
-
-            try:
-                mixer.music.unload()
-            except Exception:
-                pass
-
-            time.sleep(0.05)
-            if os.path.exists(filename):
-                os.remove(filename)
-        except Exception as e:
-            print(f"⚠️  TTS Error: {e}")
-            if os.path.exists(filename):
+            if text_to_speak:
+                _global_speaker_active = True
                 try:
-                    os.remove(filename)
-                except:
-                    pass
+                    # 1. Generate Audio file
+                    filename = f"speak_{uuid.uuid4()}.mp3"
+                    tts = gTTS(text=text_to_speak, lang='en', tld='com')
+                    tts.save(filename)
 
-    def speak(self, text: str):
-        with self.lock:
-            self.text_queue.append(text)
+                    # 2. Play Audio FORCEFULLY on Card 1 (USB Speaker)
+                    # using 'plughw:1,0' is the safest way to talk to ALSA
+                    os.system(f"mpg321 -a plughw:1,0 -q {filename}")
+                    
+                    # Cleanup
+                    if os.path.exists(filename):
+                        os.remove(filename)
+
+                except Exception as e:
+                    print(f"Speaker Error: {e}")
+                finally:
+                    _global_speaker_active = False
+            else:
+                time.sleep(0.1)
+
+    def speak(self, text):
+        self.lock.acquire()
+        self.queue.append(text)
+        self.lock.release()
 
     def stop(self):
-        self.is_running = False
+        self.running = False
 
+# Global helper for main.py
+_global_speaker_thread = None
 
-if __name__ == '__main__':
-    pass
+def init_speaker_thread():
+    global _global_speaker_thread
+    if _global_speaker_thread is None:
+        _global_speaker_thread = GTTSThread()
+        _global_speaker_thread.start()
+    return _global_speaker_thread
 
-
-# Module-level singleton speaker helpers
-_global_speaker = None
-_global_lock = threading.Lock()
-
-
-def _get_speaker():
-    global _global_speaker
-    with _global_lock:
-        if _global_speaker is None:
-            _global_speaker = GTTSThread()
-            _global_speaker.daemon = True
-            try:
-                _global_speaker.start()
-            except RuntimeError:
-                # If the thread was already started or failed, ignore
-                pass
-        return _global_speaker
-
-
-def speak(text_or_list):
-    """Public speak API: accepts a string or list of strings.
-
-    This lazily starts the background speaker thread and queues text.
-    """
-    sp = _get_speaker()
-    if isinstance(text_or_list, str):
-        sp.speak(text_or_list)
-    else:
-        for t in text_or_list:
-            sp.speak(t)
-
-
-def stop_speaker():
-    sp = _global_speaker
-    if sp:
-        sp.stop()
-
-
-def is_speaking() -> bool:
-    """Return True if something is queued or mixer is currently playing."""
-    sp = _global_speaker
-    if not sp:
-        return False
-    
-    try:
-        busy = mixer.music.get_busy()
-    except Exception:
-        busy = False
-    
-    try:
-        with sp.lock:
-            has_queue = len(sp.text_queue) > 0
-            return busy or has_queue
-    except Exception:
-        return busy
+def speak(text):
+    """Global speak function called by main.py"""
+    s = init_speaker_thread()
+    s.speak(text)
