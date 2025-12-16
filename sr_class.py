@@ -83,141 +83,137 @@ class SpeechRecognitionThread(threading.Thread):
 
         while not self.stop_event.is_set():
             try:
+                # STRICT MUTE: Block here if robot is speaking or cooling down
+                # We do this OUTSIDE the mic context so we don't buffer audio while waiting
+                while not self.stop_event.is_set():
+                        if is_speaking():
+                            print("🔇 ROBOT SPEAKING - MIC CLOSED...    ", end='\r')
+                            time.sleep(0.1)
+                            continue
+                        
+                        remaining = 3.0 - (time.time() - get_last_spoken_time())
+                        if remaining > 0:
+                            print(f"🔇 COOLING DOWN ({remaining:.1f}s)...      ", end='\r')
+                            time.sleep(0.1)
+                            continue
+                        break # Safe to proceed
+                
+                if self.conversation_active and (time.time() - get_last_spoken_time()) < 4.0:
+                        print("\n🟢 NOW LISTENING - GO AHEAD!\n")
+
+                # Open Mic FRESH every time to ensure empty buffer
                 with self.microphone as source:
-                    print("🔊 Adjusting for ambient noise...")
+                    # Only adjust for noise once or periodically, not every single loop if possible, 
+                    # but here we need safety. A quick 0.5s adjustment is fine.
+                    print("🔊 Adjusting...", end='\r')
                     with no_alsa_error():
-                        self.recognizer.adjust_for_ambient_noise(source, duration=1)
-                    if self.recognizer.energy_threshold < 100:
-                         self.recognizer.energy_threshold = 100
-                    print(f"   Noise level: {self.recognizer.energy_threshold}\n")
+                         self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
 
-                    timeout_count = 0
-                    while not self.stop_event.is_set():
-                        if self.conversation_active:
-                            print("👂 Listening (conversation mode)...")
-                        else:
-                            print("👂 Listening for 'OMNIS'...")
+                    if self.conversation_active:
+                        print("👂 Listening (conversation mode)...")
+                    else:
+                        print("👂 Listening for 'OMNIS'...")
 
+                    try:
+                        with no_alsa_error():     
+                            audio_data = self.recognizer.listen(source, timeout=5, phrase_time_limit=8)
+                        
+                        # Double check if speaker became active during listening or processing
+                        # OR if it finished speaking recently (which means it spoke DURING the listen)
+                        if is_speaking() or (time.time() - get_last_spoken_time() < 3.0):
+                            print("🔇 Discarding (speaker active during listen)")
+                            continue
+
+                        print("🔄 Processing audio...")
                         try:
-                            # FEEDBACK LOOP FIX: Wait if speaker is playing
-                            # STRICT MUTE: Block here if robot is speaking or cooling down
-                            while not self.stop_event.is_set():
-                                 if is_speaking():
-                                     print("🔇 ROBOT SPEAKING - MIC MUTED...    ", end='\r')
-                                     time.sleep(0.1)
-                                     continue
-                                 
-                                 remaining = 3.0 - (time.time() - get_last_spoken_time())
-                                 if remaining > 0:
-                                     print(f"🔇 COOLING DOWN ({remaining:.1f}s)...      ", end='\r')
-                                     time.sleep(0.1)
-                                     continue
-                                 break # Safe to proceed
-                            
-                            if self.conversation_active and (time.time() - get_last_spoken_time()) < 4.0:
-                                  print("\n🟢 NOW LISTENING - GO AHEAD!\n")
-                                 
-                            with no_alsa_error():
-                                # FLUSH BUFFER: Briefly adjust for noise to consume any buffered audio
-                                self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
-                                audio_data = self.recognizer.listen(source, timeout=5, phrase_time_limit=8)
+                            text = self.recognizer.recognize_google(audio_data)
+                        except sr.UnknownValueError:
+                            print("   (Didn't catch that)")
+                            continue
+                        
+                        # TRIPLE check - if we were speaking while processing
+                        if is_speaking():
+                            print(f"🔇 Discarding result '{text}' (self-heard)")
+                            continue
 
-                            # Double check if speaker became active during listening or processing
-                            # OR if it finished speaking recently (which means it spoke DURING the listen)
-                            if is_speaking() or (time.time() - get_last_spoken_time() < 3.0):
-                                print("🔇 Discarding (speaker active during listen)")
-                                continue
+                        print(f"📝 Heard: '{text}'")
 
-                            print("🔄 Processing audio...")
-                            try:
-                                text = self.recognizer.recognize_google(audio_data)
-                            except sr.UnknownValueError:
-                                print("   (Didn't catch that)")
-                                continue
-                            
-                            # TRIPLE check - if we were speaking while processing
-                            if is_speaking():
-                                print(f"🔇 Discarding result '{text}' (self-heard)")
-                                continue
-
-                            print(f"📝 Heard: '{text}'")
-
-                            if getattr(shared_state, 'awaiting_name', False):
-                                name_spoken = text.strip()
-                                greetings = {'hello', 'hi', 'hey', 'thanks', 'thank you'}
-                                norm = name_spoken.lower().strip()
-                                if not name_spoken or norm in greetings or len(''.join(ch for ch in norm if ch.isalpha())) < 2:
-                                    self.speaker.speak("I didn't catch a name.")
-                                    shared_state.awaiting_name = False
-                                    shared_state.awaiting_encoding = None
-                                    shared_state.awaiting_face_image = None
-                                    continue
-                                enc = getattr(shared_state, 'awaiting_encoding', None)
-                                img = getattr(shared_state, 'awaiting_face_image', None)
-                                ok = register_name(name_spoken, enc, img)
-                                if ok:
-                                    self.speaker.speak(f"Thanks {name_spoken}, I will remember you.")
-                                else:
-                                    self.speaker.speak("Sorry, I couldn't save your name.")
+                        if getattr(shared_state, 'awaiting_name', False):
+                            name_spoken = text.strip()
+                            greetings = {'hello', 'hi', 'hey', 'thanks', 'thank you'}
+                            norm = name_spoken.lower().strip()
+                            if not name_spoken or norm in greetings or len(''.join(ch for ch in norm if ch.isalpha())) < 2:
+                                self.speaker.speak("I didn't catch a name.")
                                 shared_state.awaiting_name = False
                                 shared_state.awaiting_encoding = None
                                 shared_state.awaiting_face_image = None
                                 continue
+                            enc = getattr(shared_state, 'awaiting_encoding', None)
+                            img = getattr(shared_state, 'awaiting_face_image', None)
+                            ok = register_name(name_spoken, enc, img)
+                            if ok:
+                                self.speaker.speak(f"Thanks {name_spoken}, I will remember you.")
+                            else:
+                                self.speaker.speak("Sorry, I couldn't save your name.")
+                            shared_state.awaiting_name = False
+                            shared_state.awaiting_encoding = None
+                            shared_state.awaiting_face_image = None
+                            continue
 
-                            text_lower = text.lower()
-                            tokens = text_lower.split()
+                        text_lower = text.lower()
+                        tokens = text_lower.split()
+                        
+                        if self.conversation_active:
+                            has_wake_word = False
+                        else:
+                            has_wake_word = any(w in tokens for w in self.wake_words)
+
+                        if has_wake_word or self.conversation_active:
+                            if has_wake_word:
+                                print("\n✅ WAKE WORD DETECTED!\n")
+                                self.speaker.speak("Yes, how can I help you?")
+                                self.conversation_active = True
+                            else:
+                                print("\n💬 Follow-up question\n")
+
+                            question = text_lower
+                            for w in self.wake_words:
+                                question = question.replace(w, "")
+                            question = question.strip()
                             
-                            if self.conversation_active:
-                                has_wake_word = False
-                            else:
-                                has_wake_word = any(w in tokens for w in self.wake_words)
-
-                            if has_wake_word or self.conversation_active:
-                                if has_wake_word:
-                                    print("\n✅ WAKE WORD DETECTED!\n")
-                                    self.speaker.speak("Yes, how can I help you?")
-                                    self.conversation_active = True
+                            if question and len(question) >= 3:
+                                print(f"❓ Question: {question}\n")
+                                school_ans = get_school_answer_enhanced(question)
+                                if school_ans:
+                                    print(f"🏫 School Response: {school_ans}\n")
+                                    self.speaker.speak(school_ans)
                                 else:
-                                    print("\n💬 Follow-up question\n")
-
-                                question = text_lower
-                                for w in self.wake_words:
-                                    question = question.replace(w, "")
-                                question = question.strip()
-                                
-                                if question and len(question) >= 3:
-                                    print(f"❓ Question: {question}\n")
-                                    school_ans = get_school_answer_enhanced(question)
-                                    if school_ans:
-                                        print(f"🏫 School Response: {school_ans}\n")
-                                        self.speaker.speak(school_ans)
+                                    print("🤖 Getting AI response...")
+                                    resp = get_chat_response(question)
+                                    if isinstance(resp, dict) and 'choices' in resp:
+                                        answer = resp['choices'][0]['message']['content']
+                                        print(f"💬 AI Response: {answer}\n")
+                                        self.speaker.speak(answer)
                                     else:
-                                        print("🤖 Getting AI response...")
-                                        resp = get_chat_response(question)
-                                        if isinstance(resp, dict) and 'choices' in resp:
-                                            answer = resp['choices'][0]['message']['content']
-                                            print(f"💬 AI Response: {answer}\n")
-                                            self.speaker.speak(answer)
-                                        else:
-                                            self.speaker.speak("Sorry, I couldn't process that.")
-                                    timeout_count = 0
-                            else:
-                                print("   (No wake word)\n")
+                                        self.speaker.speak("Sorry, I couldn't process that.")
+                                timeout_count = 0
+                        else:
+                            print("   (No wake word)\n")
 
-                        except sr.WaitTimeoutError:
-                            if self.conversation_active:
-                                timeout_count += 1
-                                if timeout_count >= 3:
-                                    print("⏱️ Timeout - say 'OMNIS' to start again\n")
-                                    self.conversation_active = False
-                                    timeout_count = 0
-                        except sr.UnknownValueError:
-                            print("   (Didn't catch that)\n")
-                        except sr.RequestError as ex:
-                            print(f"❌ Speech error: {ex}\n")
-                        except Exception as e:
-                            print(f"❌ Error: {e}")
-                            time.sleep(1)
+                    except sr.WaitTimeoutError:
+                        if self.conversation_active:
+                            timeout_count += 1
+                            if timeout_count >= 3:
+                                print("⏱️ Timeout - say 'OMNIS' to start again\n")
+                                self.conversation_active = False
+                                timeout_count = 0
+                    except sr.UnknownValueError:
+                        print("   (Didn't catch that)\n")
+                    except sr.RequestError as ex:
+                        print(f"❌ Speech error: {ex}\n")
+                    except Exception as e:
+                        print(f"❌ Error: {e}")
+                        time.sleep(1)
             except Exception as e:
                 print(f"❌ Microphone Error: {e}")
                 time.sleep(2)
