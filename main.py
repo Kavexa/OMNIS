@@ -164,6 +164,13 @@ try:
                         
                     if not is_in_conversation:
                         conversation_active = False
+                        # Helper for time-based greetings
+                        def get_time_based_greeting():
+                            h = int(time.strftime('%H'))
+                            if h < 12: return "Good morning"
+                            elif h < 17: return "Good afternoon"
+                            else: return "Good evening"
+
                         # Greet newly-arrived people immediately; for those already present, respect cooldown
                         new_people = known_people_in_frame - prev_known_people
                         # Greet newcomers first (always queue the greeting so it plays even if TTS is busy)
@@ -171,7 +178,9 @@ try:
                             # Debug: why we will greet this person
                             if os.environ.get('OMNIS_DEBUG') == '1':
                                 print(f"[DEBUG] greeting new person: {person}")
-                            payload = f"Hello {person}! Welcome to MGM Model School robot."
+                            
+                            greeting_time = get_time_based_greeting()
+                            payload = f"Hello there {person}, {greeting_time}! Welcome to MGM Model School robot."
                             speak(payload)
                             last_seen[person] = current_time
 
@@ -182,7 +191,9 @@ try:
                             if (current_time - last) > GREETING_COOLDOWN:
                                 if os.environ.get('OMNIS_DEBUG') == '1':
                                     print(f"[DEBUG] greeting existing person after cooldown: {person} last_seen={last} now={current_time}")
-                                payload = f"Hello {person}! Welcome to MGM Model School robot."
+                                
+                                greeting_time = get_time_based_greeting()
+                                payload = f"Hello again {person}, {greeting_time}! Welcome back to MGM Model School robot."
                                 speak(payload)
                                 last_seen[person] = current_time
 
@@ -201,9 +212,13 @@ try:
                             if primary_person != last_primary_person:
                                 if os.environ.get('OMNIS_DEBUG') == '1':
                                     print(f"[DEBUG] greeting primary person: {primary_person}")
-                                payload = f"Hello {primary_person}! Welcome to MGM Model School robot."
-                                speak(payload)
-                                last_seen[primary_person] = current_time
+                                
+                                # Only greet if we haven't JUST greeted them as a "new person" logic above
+                                if person not in new_people:
+                                     greeting_time = get_time_based_greeting()
+                                     payload = f"Hello there {primary_person}, {greeting_time}! Welcome to MGM Model School robot."
+                                     speak(payload)
+                                     last_seen[primary_person] = current_time
                                 last_primary_person = primary_person
                         else:
                             last_primary_person = None
