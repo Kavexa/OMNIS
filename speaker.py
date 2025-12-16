@@ -27,7 +27,7 @@ class GTTSThread(threading.Thread):
         self.running = True
 
     def run(self):
-        global _global_speaker_active
+        global _global_speaker_active, _last_spoken_time
         while self.running:
             text_to_speak = None
             
