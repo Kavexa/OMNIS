@@ -193,7 +193,8 @@ try:
                                     print(f"[DEBUG] greeting existing person after cooldown: {person} last_seen={last} now={current_time}")
                                 
                                 greeting_time = get_time_based_greeting()
-                                payload = f"Hello again {person}, {greeting_time}! Welcome back to MGM Model School robot."
+                                # CASUAL RE-GREETING: Just a quick acknowledgement
+                                payload = f"Hello there {person}!"
                                 speak(payload)
                                 last_seen[person] = current_time
 
