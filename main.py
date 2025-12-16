@@ -25,7 +25,8 @@ imgBackground = cv2.imread('Resources/background.png')
 speech_thread = None
 conversation_active = False  # Track if voice conversation is happening
 last_seen = {}  # person_id -> last seen timestamp
-GREETING_COOLDOWN = 3600  # seconds between greetings for the same person (1 HOUR)
+GREETING_COOLDOWN = 300  # 5 Minutes: Re-greet people standing there
+REENTRY_THRESHOLD = 60   # 1 Minute: Don't greet if they just looked away briefly
 FACE_MATCH_TOLERANCE = float(os.environ.get('FACE_MATCH_TOLERANCE', '0.55'))
 # Maximum faces to process per frame to bound CPU usage (helps low-power devices)
 MAX_FACES = int(os.environ.get('FACE_MAX_FACES', '4'))
@@ -171,18 +172,35 @@ try:
                             elif h < 17: return "Good afternoon"
                             else: return "Good evening"
 
-                        # Greet newly-arrived people immediately; for those already present, respect cooldown
+                        # Greet newly-arrived people immediately
                         new_people = known_people_in_frame - prev_known_people
-                        # Greet newcomers first (always queue the greeting so it plays even if TTS is busy)
                         for person in new_people:
-                            # Debug: why we will greet this person
-                            if os.environ.get('OMNIS_DEBUG') == '1':
-                                print(f"[DEBUG] greeting new person: {person}")
+                            last = last_seen.get(person, 0)
+                            gap = current_time - last
                             
-                            greeting_time = get_time_based_greeting()
-                            # Formal First Greeting: "Hello Name, Good Morning. Welcome to MGM Model School. I am OMNIS."
-                            payload = f"Hello {person}, {greeting_time}. Welcome to MGM Model School. I am OMNIS."
-                            speak(payload)
+                            if person not in last_seen:
+                                # FIRST TIME EVER (Since Reboot): Full Formal Greeting
+                                if os.environ.get('OMNIS_DEBUG') == '1':
+                                    print(f"[DEBUG] Full greeting new person: {person}")
+                                
+                                greeting_time = get_time_based_greeting()
+                                payload = f"Hello {person}, {greeting_time}. Welcome to MGM Model School. I am OMNIS."
+                                speak(payload)
+                            
+                            elif gap > REENTRY_THRESHOLD:
+                                # RETURNING USER (>1 min absence): Casual Greeting
+                                if os.environ.get('OMNIS_DEBUG') == '1':
+                                    print(f"[DEBUG] Casual return greeting: {person} gap={gap:.1f}s")
+                                
+                                # Casual: "Hello there Name"
+                                payload = f"Hello there {person}!"
+                                speak(payload)
+                            
+                            else:
+                                # FLICKER (<1 min absence): Ignore (Silent update)
+                                if os.environ.get('OMNIS_DEBUG') == '1':
+                                    print(f"[DEBUG] Ignored flicker for {person} gap={gap:.1f}s")
+                            
                             last_seen[person] = current_time
 
                         # For people who were already present, greet only if cooldown expired
@@ -191,10 +209,9 @@ try:
                             last = last_seen.get(person, 0)
                             if (current_time - last) > GREETING_COOLDOWN:
                                 if os.environ.get('OMNIS_DEBUG') == '1':
-                                    print(f"[DEBUG] greeting existing person after cooldown: {person} last_seen={last} now={current_time}")
+                                    print(f"[DEBUG] Standing re-greeting: {person} last={last}")
                                 
-                                greeting_time = get_time_based_greeting()
-                                # CASUAL RE-GREETING: Just a quick acknowledgement
+                                # Casual re-greeting for standing people
                                 payload = f"Hello there {person}!"
                                 speak(payload)
                                 last_seen[person] = current_time
