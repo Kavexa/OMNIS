@@ -3,7 +3,7 @@ import time
 import os
 import speech_recognition as sr
 
-from speaker import GTTSThread, is_speaking
+from speaker import GTTSThread, is_speaking, get_last_spoken_time
 from ai_response import get_chat_response
 from school_data import get_school_answer_enhanced
 import shared_state
@@ -112,6 +112,13 @@ class SpeechRecognitionThread(threading.Thread):
                                 print("🔇 Discarding (speaker active)")
                                 continue
                                 
+                            # Safe guard: Wait for echoes to die down
+                            time_since_speech = time.time() - get_last_spoken_time()
+                            if time_since_speech < 1.5:
+                                print(f"🔇 Waiting for echo clearance ({1.5 - time_since_speech:.1f}s)...", end='\r')
+                                time.sleep(0.2)
+                                continue
+
                             # Double check if speaker became active during listening or processing
                             if is_speaking():
                                 print("🔇 Discarding (speaker active during listen)")

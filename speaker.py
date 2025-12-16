@@ -7,9 +7,13 @@ from gtts import gTTS
 
 # Shared state to check if speaker is active
 _global_speaker_active = False
+_last_spoken_time = 0
 
 def is_speaking():
     return _global_speaker_active
+
+def get_last_spoken_time():
+    return _last_spoken_time
 
 class GTTSThread(threading.Thread):
     def __init__(self):
@@ -48,6 +52,7 @@ class GTTSThread(threading.Thread):
                     print(f"Speaker Error: {e}")
                 finally:
                     _global_speaker_active = False
+                    _last_spoken_time = time.time()
             else:
                 time.sleep(0.1)
 
