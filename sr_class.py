@@ -100,28 +100,25 @@ class SpeechRecognitionThread(threading.Thread):
 
                         try:
                             # FEEDBACK LOOP FIX: Wait if speaker is playing
-                            if is_speaking():
-                                print("🔇 Speaker active, waiting...", end='\r')
-                                time.sleep(0.5)
-                                continue
+                            # STRICT MUTE: Block here if robot is speaking or cooling down
+                            while not self.stop_event.is_set():
+                                 if is_speaking():
+                                     print("🔇 ROBOT SPEAKING - MIC MUTED...    ", end='\r')
+                                     time.sleep(0.1)
+                                     continue
+                                 
+                                 remaining = 3.0 - (time.time() - get_last_spoken_time())
+                                 if remaining > 0:
+                                     print(f"🔇 COOLING DOWN ({remaining:.1f}s)...      ", end='\r')
+                                     time.sleep(0.1)
+                                     continue
+                                 break # Safe to proceed
+                            
+                            if self.conversation_active and (time.time() - get_last_spoken_time()) < 4.0:
+                                  print("\n🟢 NOW LISTENING - GO AHEAD!\n")
                                  
                             with no_alsa_error():     
                                 audio_data = self.recognizer.listen(source, timeout=5, phrase_time_limit=8)
-
-                            if is_speaking():
-                                print("🔇 Discarding (speaker active)")
-                                continue
-                                
-                            # Safe guard: Wait for echoes to die down
-                            time_since_speech = time.time() - get_last_spoken_time()
-                            if time_since_speech < 3.0:
-                                print(f"🔇 Waiting for echo clearance ({3.0 - time_since_speech:.1f}s)...", end='\r')
-                                time.sleep(0.2)
-                                continue
-                                
-                            if self.conversation_active and time_since_speech > 3.0 and time_since_speech < 3.5:
-                                 # One-time prompt after cooldown
-                                 print("\n🟢 NOW LISTENING - GO AHEAD!\n")
 
                             # Double check if speaker became active during listening or processing
                             if is_speaking():
