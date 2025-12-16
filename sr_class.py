@@ -31,20 +31,41 @@ class SpeechRecognitionThread(threading.Thread):
     def _open_microphone(self) -> bool:
         try:
             if self.microphone is None:
+                target_index = None
+                
+                # Dynamic microphone finding
+                print("\n[Auto-Config] Searching for USB Microphone...")
+                try:
+                    mics = sr.Microphone.list_microphone_names()
+                    for i, name in enumerate(mics):
+                        print(f"  Device {i}: {name}")
+                        if "USB" in name and "Hardware" in name: # Prefer hardware direct
+                             target_index = i
+                             break
+                    
+                    if target_index is None:
+                        for i, name in enumerate(mics):
+                             if "USB" in name:
+                                  target_index = i
+                                  break
+                except Exception as e:
+                    print(f"  Error listing mics: {e}")
+
+                if target_index is not None:
+                     print(f"✅ Found USB Microphone at index {target_index}")
+                else:
+                     print("⚠️ No USB Mic found, trying default (index 4 or default)")
+                     target_index = 4 # Fallback
+
                 try:
                     with no_alsa_error():
-                        self.microphone = sr.Microphone(device_index=4)
+                        self.microphone = sr.Microphone(device_index=target_index)
                 except ImportError:
-                    self.microphone = sr.Microphone(device_index=4)
+                     self.microphone = sr.Microphone(device_index=target_index)
             return True
         except Exception as e:
             print(f"[Microphone] Could not open microphone: {e}")
-            try:
-                with no_alsa_error():
-                    self.microphone = sr.Microphone(device_index=4)
-                return True
-            except:
-                return False
+            return False
 
     def run(self) -> None:
         self.recognizer.dynamic_energy_threshold = True
