@@ -117,7 +117,9 @@ class SpeechRecognitionThread(threading.Thread):
                             if self.conversation_active and (time.time() - get_last_spoken_time()) < 4.0:
                                   print("\n🟢 NOW LISTENING - GO AHEAD!\n")
                                  
-                            with no_alsa_error():     
+                            with no_alsa_error():
+                                # FLUSH BUFFER: Briefly adjust for noise to consume any buffered audio
+                                self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
                                 audio_data = self.recognizer.listen(source, timeout=5, phrase_time_limit=8)
 
                             # Double check if speaker became active during listening or processing
