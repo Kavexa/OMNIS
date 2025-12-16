@@ -180,8 +180,8 @@ try:
                                 print(f"[DEBUG] greeting new person: {person}")
                             
                             greeting_time = get_time_based_greeting()
-                            # Formal First Greeting: "Hello Name, Good Morning. Welcome to MGM Model School."
-                            payload = f"Hello {person}, {greeting_time}. Welcome to MGM Model School."
+                            # Formal First Greeting: "Hello Name, Good Morning. Welcome to MGM Model School. I am OMNIS."
+                            payload = f"Hello {person}, {greeting_time}. Welcome to MGM Model School. I am OMNIS."
                             speak(payload)
                             last_seen[person] = current_time
 
@@ -218,7 +218,7 @@ try:
                                 # Only greet if we haven't JUST greeted them as a "new person" logic above
                                 if person not in new_people:
                                      greeting_time = get_time_based_greeting()
-                                     payload = f"Hello {primary_person}, {greeting_time}. Welcome to MGM Model School."
+                                     payload = f"Hello {primary_person}, {greeting_time}. Welcome to MGM Model School. I am OMNIS."
                                      speak(payload)
                                      last_seen[primary_person] = current_time
                                 last_primary_person = primary_person
