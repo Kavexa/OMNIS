@@ -121,7 +121,8 @@ class SpeechRecognitionThread(threading.Thread):
                                 audio_data = self.recognizer.listen(source, timeout=5, phrase_time_limit=8)
 
                             # Double check if speaker became active during listening or processing
-                            if is_speaking():
+                            # OR if it finished speaking recently (which means it spoke DURING the listen)
+                            if is_speaking() or (time.time() - get_last_spoken_time() < 3.0):
                                 print("🔇 Discarding (speaker active during listen)")
                                 continue
 
