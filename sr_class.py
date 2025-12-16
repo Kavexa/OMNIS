@@ -111,9 +111,24 @@ class SpeechRecognitionThread(threading.Thread):
                             if is_speaking():
                                 print("🔇 Discarding (speaker active)")
                                 continue
+                                
+                            # Double check if speaker became active during listening or processing
+                            if is_speaking():
+                                print("🔇 Discarding (speaker active during listen)")
+                                continue
 
                             print("🔄 Processing audio...")
-                            text = self.recognizer.recognize_google(audio_data)
+                            try:
+                                text = self.recognizer.recognize_google(audio_data)
+                            except sr.UnknownValueError:
+                                print("   (Didn't catch that)")
+                                continue
+                            
+                            # TRIPLE check - if we were speaking while processing
+                            if is_speaking():
+                                print(f"🔇 Discarding result '{text}' (self-heard)")
+                                continue
+
                             print(f"📝 Heard: '{text}'")
 
                             if getattr(shared_state, 'awaiting_name', False):
