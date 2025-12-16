@@ -13,10 +13,16 @@ c_error_handler = ERROR_HANDLER_FUNC(py_error_handler)
 
 @contextmanager
 def no_alsa_error():
+    asound = None
     try:
         asound = cdll.LoadLibrary('libasound.so')
         asound.snd_lib_error_set_handler(c_error_handler)
+    except OSError:
+        pass
+    
+    try:
         yield
-        asound.snd_lib_error_set_handler(None)
-    except:
-        yield
+    finally:
+        if asound:
+            asound.snd_lib_error_set_handler(None)
+
