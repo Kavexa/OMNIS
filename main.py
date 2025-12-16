@@ -158,9 +158,11 @@ try:
                     mode_type = 1
                     
                     # Greeting logic - Don't greet during active conversation
+                    is_in_conversation = False
                     if speech_thread and speech_thread.is_alive():
-                        conversation_active = True
-                    else:
+                        is_in_conversation = speech_thread.conversation_active
+                        
+                    if not is_in_conversation:
                         conversation_active = False
                         # Greet newly-arrived people immediately; for those already present, respect cooldown
                         new_people = known_people_in_frame - prev_known_people
