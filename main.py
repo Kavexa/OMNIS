@@ -25,7 +25,7 @@ imgBackground = cv2.imread('Resources/background.png')
 speech_thread = None
 conversation_active = False  # Track if voice conversation is happening
 last_seen = {}  # person_id -> last seen timestamp
-GREETING_COOLDOWN = 5  # seconds between greetings for the same person
+GREETING_COOLDOWN = 3600  # seconds between greetings for the same person (1 HOUR)
 FACE_MATCH_TOLERANCE = float(os.environ.get('FACE_MATCH_TOLERANCE', '0.55'))
 # Maximum faces to process per frame to bound CPU usage (helps low-power devices)
 MAX_FACES = int(os.environ.get('FACE_MAX_FACES', '4'))
