@@ -103,41 +103,40 @@ class SpeechRecognitionThread(threading.Thread):
                         print("\n🟢 NOW LISTENING - GO AHEAD!\n")
 
                 # Open Mic FRESH every time to ensure empty buffer
-                with self.microphone as source:
-                    # Only adjust for noise once or periodically, not every single loop if possible, 
-                    # but here we need safety. A quick 0.2s adjustment is fine.
-                    print("🔊 Adjusting...", end='\r')
-                    with no_alsa_error():
-                         self.recognizer.adjust_for_ambient_noise(source, duration=0.2)
+                with no_alsa_error():
+                    with self.microphone as source:
+                        # Only adjust for noise once or periodically, not every single loop if possible, 
+                        # but here we need safety. A quick 0.2s adjustment is fine.
+                        print("🔊 Adjusting...", end='\r')
+                        self.recognizer.adjust_for_ambient_noise(source, duration=0.2)
 
-                    if self.conversation_active:
-                        print("👂 Listening (conversation mode)...")
-                    else:
-                        print("👂 Listening for 'OMNIS'...")
+                        if self.conversation_active:
+                            print("👂 Listening (conversation mode)...")
+                        else:
+                            print("👂 Listening for 'OMNIS'...")
 
-                    try:
-                        with no_alsa_error():     
-                            audio_data = self.recognizer.listen(source, timeout=5, phrase_time_limit=8)
-                        
-                        # Double check if speaker became active during listening or processing
-                        # OR if it finished speaking recently (which means it spoke DURING the listen)
-                        if is_speaking() or (time.time() - get_last_spoken_time() < 3.0):
-                            print("🔇 Discarding (speaker active during listen)")
-                            continue
-
-                        print("🔄 Processing audio...")
                         try:
-                            text = self.recognizer.recognize_google(audio_data)
-                        except sr.UnknownValueError:
-                            print("   (Didn't catch that)")
-                            continue
-                        
-                        # TRIPLE check - if we were speaking while processing
-                        if is_speaking():
-                            print(f"🔇 Discarding result '{text}' (self-heard)")
-                            continue
+                            audio_data = self.recognizer.listen(source, timeout=5, phrase_time_limit=8)
+                            
+                            # Double check if speaker became active during listening or processing
+                            # OR if it finished speaking recently (which means it spoke DURING the listen)
+                            if is_speaking() or (time.time() - get_last_spoken_time() < 1.5):
+                                print("🔇 Discarding (speaker active during listen)")
+                                continue
 
-                        print(f"📝 Heard: '{text}'")
+                            print("🔄 Processing audio...")
+                            try:
+                                text = self.recognizer.recognize_google(audio_data)
+                            except sr.UnknownValueError:
+                                print("   (Didn't catch that)")
+                                continue
+                            
+                            # TRIPLE check - if we were speaking while processing
+                            if is_speaking():
+                                print(f"🔇 Discarding result '{text}' (self-heard)")
+                                continue
+
+                            print(f"📝 Heard: '{text}'")
 
                         if getattr(shared_state, 'awaiting_name', False):
                             name_spoken = text.strip()
