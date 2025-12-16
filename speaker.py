@@ -10,7 +10,11 @@ _global_speaker_active = False
 _last_spoken_time = 0
 
 def is_speaking():
-    return _global_speaker_active
+    # True if audio is playing OR if messages are queued to be played
+    busy = _global_speaker_active
+    if _global_speaker_thread and _global_speaker_thread.queue:
+        busy = True
+    return busy
 
 def get_last_spoken_time():
     return _last_spoken_time

@@ -114,8 +114,8 @@ class SpeechRecognitionThread(threading.Thread):
                                 
                             # Safe guard: Wait for echoes to die down
                             time_since_speech = time.time() - get_last_spoken_time()
-                            if time_since_speech < 1.5:
-                                print(f"🔇 Waiting for echo clearance ({1.5 - time_since_speech:.1f}s)...", end='\r')
+                            if time_since_speech < 2.0:
+                                print(f"🔇 Waiting for echo clearance ({2.0 - time_since_speech:.1f}s)...", end='\r')
                                 time.sleep(0.2)
                                 continue
 
