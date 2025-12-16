@@ -91,23 +91,24 @@ class SpeechRecognitionThread(threading.Thread):
                             time.sleep(0.1)
                             continue
                         
-                        remaining = 3.0 - (time.time() - get_last_spoken_time())
+                        # REDUCED LATENCY: 3.0s -> 1.5s is usually enough for echo to die
+                        remaining = 1.5 - (time.time() - get_last_spoken_time())
                         if remaining > 0:
                             print(f"🔇 COOLING DOWN ({remaining:.1f}s)...      ", end='\r')
                             time.sleep(0.1)
                             continue
                         break # Safe to proceed
                 
-                if self.conversation_active and (time.time() - get_last_spoken_time()) < 4.0:
+                if self.conversation_active and (time.time() - get_last_spoken_time()) < 3.0:
                         print("\n🟢 NOW LISTENING - GO AHEAD!\n")
 
                 # Open Mic FRESH every time to ensure empty buffer
                 with self.microphone as source:
                     # Only adjust for noise once or periodically, not every single loop if possible, 
-                    # but here we need safety. A quick 0.5s adjustment is fine.
+                    # but here we need safety. A quick 0.2s adjustment is fine.
                     print("🔊 Adjusting...", end='\r')
                     with no_alsa_error():
-                         self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                         self.recognizer.adjust_for_ambient_noise(source, duration=0.2)
 
                     if self.conversation_active:
                         print("👂 Listening (conversation mode)...")
