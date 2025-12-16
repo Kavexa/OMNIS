@@ -1,4 +1,7 @@
 import os
+# Fix for gRPC fork issue on Raspberry Pi
+os.environ['GRPC_POLL_STRATEGY'] = 'epoll1'
+
 import pickle
 import cv2
 import numpy as np
