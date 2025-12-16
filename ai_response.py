@@ -172,6 +172,16 @@ def get_chat_response(payload: str):
             }
     except Exception as e:
         print(f"Error getting AI response: {e}")
+        error_msg = str(e)
+        if "429" in error_msg or "Quota exceeded" in error_msg:
+             return {
+                'choices': [{
+                    'message': {
+                        'content': "I'm currently busy with too many requests. Please wait a minute."
+                    }
+                }]
+            }
+        
         # Return a helpful error message instead of error
         return {
             'choices': [{
