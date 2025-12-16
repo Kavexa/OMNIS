@@ -56,7 +56,11 @@ class GTTSThread(threading.Thread):
                     print(f"Speaker Error: {e}")
                 finally:
                     _global_speaker_active = False
-                    _last_spoken_time = time.time()
+                    # Only update timestamp if queue is empty (finished all speech)
+                    self.lock.acquire()
+                    if not self.queue:
+                         _last_spoken_time = time.time()
+                    self.lock.release()
             else:
                 time.sleep(0.1)
 
